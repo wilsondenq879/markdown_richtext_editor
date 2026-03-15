@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Markdown WYSIWYG Editor",
+  "version": "0.5.3",
+  "description": "Adds a WYSIWYG editor for GitHub markdown editing with table support and wide issue layout toggle with smarter GitHub layout detection.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://github.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
