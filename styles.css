@@ -202,50 +202,67 @@
   }
 }
 
+/* =========================================================
+   寬版模式 (Wide Mode) - 支援 GitHub 傳統與最新 React 版面
+========================================================= */
+
+/* 解除所有主要容器的最大寬度限制 (包含傳統版面與基礎容器) */
 html.ghx-wide-mode .application-main .container-xl,
 html.ghx-wide-mode .application-main .container-lg,
 html.ghx-wide-mode .application-main .container-md,
 html.ghx-wide-mode .application-main .container-sm,
 html.ghx-wide-mode .application-main .container,
 html.ghx-wide-mode .application-main .Layout,
+html.ghx-wide-mode .application-main .Layout-main,
 html.ghx-wide-mode .application-main .repository-content,
 html.ghx-wide-mode .application-main .discussion-timeline,
-html.ghx-wide-mode .application-main .new-discussion-timeline {
-  max-width: 98vw !important;
-  width: 98vw !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
+html.ghx-wide-mode .application-main .new-discussion-timeline,
+html.ghx-wide-mode .application-main .markdown-body,
+html.ghx-wide-mode .application-main [data-testid*="issue"],
+html.ghx-wide-mode .application-main [data-testid*="project"],
+html.ghx-wide-mode .application-main [class*="container"],
+html.ghx-wide-mode .application-main [class*="Layout-main"] {
+  max-width: none !important;
 }
 
+/* 針對 GitHub 新版 React 結構 (Repo 檔案、Commit 等) 的寬度解鎖 */
+html.ghx-wide-mode .application-main div[data-target="react-app.reactRoot"] div[class*='prc-PageLayout-Content' i],
+html.ghx-wide-mode .application-main div[data-target="react-app.reactRoot"] div[class*='prc-PageLayout-Content' i] > div[class^='Box-sc-'],
+html.ghx-wide-mode .application-main div[style*="--sticky-pane-height"] > div[class^='Box-sc-'],
+html.ghx-wide-mode .application-main div[data-selector="repos-split-pane-content"] {
+  max-width: none !important;
+}
+
+/* ======= 專門針對新版 React Issue 頁面的暴力解鎖 ======= */
+html.ghx-wide-mode .application-main div[data-target="react-app.reactRoot"] div[class*='prc-PageLayout-root' i],
+html.ghx-wide-mode .application-main div[data-target="react-app.reactRoot"] div[class*='prc-PageLayout-content' i],
+html.ghx-wide-mode .application-main [data-testid="issue-viewer-issue-container"],
+html.ghx-wide-mode .application-main [data-testid="issue-viewer-main"],
+html.ghx-wide-mode .application-main .react-issue-body {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* 解鎖 Issue 內部的 Box 與評論區塊 */
+html.ghx-wide-mode .application-main div[data-target="react-app.reactRoot"] div[class*='prc-PageLayout-content' i] > div,
+html.ghx-wide-mode .application-main [data-testid="issue-viewer-issue-container"] > div {
+  max-width: none !important;
+}
+/* ======================================================= */
+
+/* 確保主內容區塊能撐滿空間 */
 html.ghx-wide-mode .application-main .Layout-main,
 html.ghx-wide-mode .application-main .repository-content,
 html.ghx-wide-mode .application-main .discussion-timeline,
 html.ghx-wide-mode .application-main .new-discussion-timeline {
-  max-width: none !important;
   width: 100% !important;
-  min-width: 0 !important;
 }
 
-html.ghx-wide-mode .application-main [role="dialog"] {
-  max-width: 96vw !important;
-}
-
-html.ghx-wide-mode .application-main .gh-header-title,
-html.ghx-wide-mode .application-main .gh-header-title .markdown-title,
-html.ghx-wide-mode .application-main h1 {
-  writing-mode: horizontal-tb !important;
-  white-space: normal !important;
-  word-break: normal !important;
-  overflow-wrap: anywhere !important;
-}
-
-html.ghx-wide-mode .application-main .markdown-body {
-  max-width: none !important;
-  overflow-x: auto;
-}
-
-html.ghx-wide-mode .application-main .markdown-body table {
-  display: block;
-  width: max-content;
-  min-width: 100%;
+/* 側邊欄與對話框的優化防護：避免彈出視窗也被撐到 100% 導致版面壞掉，且保護 Issue 側邊欄 (pane) 的比例 */
+html.ghx-wide-mode .application-main aside,
+html.ghx-wide-mode .application-main [role="dialog"],
+html.ghx-wide-mode .application-main [aria-label*="issue" i],
+html.ghx-wide-mode .application-main [aria-label*="comment" i],
+html.ghx-wide-mode .application-main div[class*='prc-PageLayout-pane' i] {
+  max-width: min(92vw, 1500px) !important;
 }
