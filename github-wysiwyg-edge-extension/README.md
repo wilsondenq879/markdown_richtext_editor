@@ -25,9 +25,12 @@
   - 清單、Task List、引用
   - H1 / H2 / H3
   - 分隔線
-- 右下角固定顯示「寬版閱讀：開 / 關」與目前 extension 版本號
+- 右下角固定顯示精簡版「寬版：開 / 關」按鈕，版本號保留在滑鼠提示中
 - 透過 `MutationObserver` 自動處理 GitHub 動態載入編輯器
 - 透過 `chrome.storage.sync` 記住寬版閱讀狀態
+
+## 截圖
+
 
 ## 安裝方式（Edge）
 

@@ -1398,7 +1398,9 @@
 
   function updateWideToggleLabel() {
     if (!wideToggleEl) return;
-    wideToggleEl.textContent = `寬版閱讀：${currentWideMode ? '開' : '關'} · v${EXT_VERSION}`;
+    wideToggleEl.textContent = `寬版：${currentWideMode ? '開' : '關'}`;
+    wideToggleEl.title = `寬版閱讀：${currentWideMode ? '開' : '關'} · v${EXT_VERSION}`;
+    wideToggleEl.setAttribute('aria-label', wideToggleEl.title);
     wideToggleEl.classList.toggle('is-on', currentWideMode);
     wideToggleEl.classList.toggle('is-off', !currentWideMode);
   }
