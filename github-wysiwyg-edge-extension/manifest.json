@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub WYSIWYG + Wide View",
+  "version": "0.1.0",
+  "description": "Adds a toggleable WYSIWYG editor and a wide reading switch to GitHub issues, project side panels, comments, and Markdown file editing.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://github.com/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "GitHub WYSIWYG + Wide View"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
