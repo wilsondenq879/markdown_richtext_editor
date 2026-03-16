@@ -2,6 +2,7 @@
   'use strict';
 
   const EXT_NS = 'ghx';
+  const EXT_VERSION = chrome?.runtime?.getManifest?.().version || 'dev';
   const STORAGE_KEYS = {
     wideMode: 'ghxWideMode'
   };
@@ -19,6 +20,7 @@
     requestAnimationFrame(() => {
       scanScheduled = false;
       scanEditors(document);
+      scanMarkdownCodeMirrorEditors(document);
       refreshEnhancedEditors();
       ensureWideToggle();
     });
@@ -46,7 +48,11 @@
     if (!textarea.isConnected) return false;
     if (textarea.dataset.ghxEnhanced === '1') return false;
     if (textarea.closest(`.${EXT_NS}-editor-shell`)) return false;
-    if (!isVisible(textarea)) return false;
+
+    if (isMarkdownFileEditPage() && hasVisibleMarkdownCodeMirror(textarea)) return false;
+
+    const markdownSurface = resolveMarkdownSurface(textarea);
+    if (!isVisible(textarea) && !markdownSurface) return false;
 
     const meta = [
       textarea.name,
@@ -74,13 +80,98 @@
       'form'
     ].join(','));
 
-    if (isMarkdownFileEditPage()) return true;
+    if (markdownSurface) return true;
     if (/(comment|markdown|body|issue|description|details|write|reply)/.test(meta)) return true;
     if (ancestorMatch && textarea.rows >= 4) return true;
     return false;
   }
 
+  function resolveMarkdownSurface(textarea) {
+    if (!isMarkdownFileEditPage()) return null;
+    const meta = [
+      textarea.name,
+      textarea.id,
+      textarea.className,
+      textarea.getAttribute('aria-label'),
+      textarea.getAttribute('data-testid')
+    ].join(' ').toLowerCase();
+    const isMarkdownSource = /(value|blob|code|editor|content|markdown)/.test(meta);
+
+    const cmEditor = findMarkdownFileCodeMirror(textarea);
+    if (cmEditor && isMarkdownSource) {
+      return {
+        type: 'codemirror',
+        element: cmEditor,
+        inputTarget: cmEditor.querySelector('.cm-content') || cmEditor,
+        view: findCodeMirrorView(cmEditor)
+      };
+    }
+
+    if (!cmEditor && isVisible(textarea) && isMarkdownSource) {
+      return {
+        type: 'textarea',
+        element: textarea,
+        inputTarget: textarea,
+        view: null
+      };
+    }
+
+    return null;
+  }
+
+  function findMarkdownFileCodeMirror(textarea) {
+    const containers = [
+      textarea.closest('form'),
+      textarea.closest('.js-blob-form'),
+      textarea.closest('[data-testid="commit-form"]'),
+      document
+    ].filter(Boolean);
+
+    for (const container of containers) {
+      const editors = Array.from(container.querySelectorAll('.cm-editor')).filter(isVisible);
+      if (editors.length === 1) return editors[0];
+      if (editors.length > 1) {
+        const preferred = editors.find((editor) => editor.querySelector('.cm-content'));
+        if (preferred) return preferred;
+      }
+    }
+
+    return null;
+  }
+
+  function hasVisibleMarkdownCodeMirror(textarea) {
+    return Boolean(findMarkdownFileCodeMirror(textarea));
+  }
+
+  function findCodeMirrorView(element) {
+    const candidates = [
+      element,
+      element?.querySelector('.cm-content'),
+      element?.querySelector('.cm-scroller')
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+      let current = candidate;
+      while (current) {
+        const cmView = current.cmView;
+        const directView = cmView?.view;
+        if (directView?.dispatch && directView?.state?.doc) return directView;
+        const rootView = cmView?.rootView?.view;
+        if (rootView?.dispatch && rootView?.state?.doc) return rootView;
+        const editorView = current.editorView;
+        if (editorView?.dispatch && editorView?.state?.doc) return editorView;
+        const direct = current.view;
+        if (direct?.dispatch && direct?.state?.doc) return direct;
+        if (current.CodeMirror?.dispatch && current.CodeMirror?.state?.doc) return current.CodeMirror;
+        current = current.parentNode;
+      }
+    }
+
+    return null;
+  }
+
   function scanEditors(root = document) {
+    if (isMarkdownFileEditPage()) return;
     const textareas = root.querySelectorAll('textarea');
     textareas.forEach((textarea) => {
       if (isCandidateTextarea(textarea)) {
@@ -89,15 +180,72 @@
     });
   }
 
+  function scanMarkdownCodeMirrorEditors(root = document) {
+    if (!isMarkdownFileEditPage()) return;
+
+    root.querySelectorAll('.cm-editor').forEach((editor) => {
+      if (!isVisible(editor)) return;
+      if (editor.closest(`.${EXT_NS}-editor-shell`)) return;
+      if (editorInstances.has(editor)) return;
+      if (!isLikelyMarkdownFileEditor(editor)) return;
+
+      const markdownSurface = {
+        type: 'codemirror',
+        element: editor,
+        inputTarget: editor.querySelector('.cm-content') || editor,
+        view: findCodeMirrorView(editor)
+      };
+
+      const textarea = findTextareaForMarkdownSurface(editor) || document.createElement('textarea');
+      enhanceTextarea(textarea, markdownSurface);
+    });
+  }
+
+  function isLikelyMarkdownFileEditor(editor) {
+    if (!editor.querySelector('.cm-content')) return false;
+
+    const contextText = [
+      editor.className,
+      editor.getAttribute('aria-label'),
+      editor.closest('form')?.className,
+      editor.closest('form')?.getAttribute('aria-label'),
+      document.querySelector('input[name="filename"], input[id*="filename"]')?.value
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (/commit|description|title/.test(contextText) && !/\.md|\.markdown|\.mdx|markdown/.test(contextText)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function findTextareaForMarkdownSurface(editor) {
+    const containers = [editor.closest('form'), editor.closest('.js-blob-form'), document].filter(Boolean);
+    for (const container of containers) {
+      const match = Array.from(container.querySelectorAll('textarea')).find((candidate) => {
+        const meta = [
+          candidate.name,
+          candidate.id,
+          candidate.className,
+          candidate.getAttribute('aria-label'),
+          candidate.getAttribute('data-testid')
+        ].join(' ').toLowerCase();
+        return /(value|blob|code|editor|content|markdown)/.test(meta);
+      });
+      if (match) return match;
+    }
+    return null;
+  }
+
   function refreshEnhancedEditors() {
-    Array.from(enhancedTextareas).forEach((textarea) => {
-      const instance = editorInstances.get(textarea);
-      if (!textarea.isConnected || !instance?.shell?.isConnected) {
-        enhancedTextareas.delete(textarea);
-        editorInstances.delete(textarea);
+    Array.from(enhancedTextareas).forEach((sourceKey) => {
+      const instance = editorInstances.get(sourceKey);
+      if (!sourceKey?.isConnected || !instance?.shell?.isConnected || !instance?.markdownSurface?.element?.isConnected) {
+        enhancedTextareas.delete(sourceKey);
+        editorInstances.delete(sourceKey);
         return;
       }
-      if (instance.mode === 'wysiwyg' && !instance.editor.matches(':focus') && instance.lastKnownMarkdown !== textarea.value) {
+      if (instance.mode === 'wysiwyg' && !instance.editor.matches(':focus') && instance.lastKnownMarkdown !== getMarkdownValue(instance)) {
         syncEditorFromTextarea(instance);
       }
       updateShellWidth(instance);
@@ -109,8 +257,15 @@
     instance.shell.style.width = '100%';
   }
 
-  function enhanceTextarea(textarea) {
-    if (editorInstances.has(textarea)) return;
+  function enhanceTextarea(textarea, providedMarkdownSurface = null) {
+    const markdownSurface = providedMarkdownSurface || resolveMarkdownSurface(textarea) || {
+      type: 'textarea',
+      element: textarea,
+      inputTarget: textarea,
+      view: null
+    };
+    const sourceKey = markdownSurface.element || textarea;
+    if (editorInstances.has(sourceKey)) return;
 
     const shell = document.createElement('div');
     shell.className = `${EXT_NS}-editor-shell`;
@@ -138,6 +293,12 @@
       { key: 'link', label: '🔗', title: '連結' },
       { key: 'ul', label: '•', title: '無序清單' },
       { key: 'ol', label: '1.', title: '有序清單' },
+      { key: 'task', label: '☑', title: 'Task List' },
+      { key: 'table', label: '▦', title: '表格' },
+      { key: 'addCol', label: '+C', title: '新增欄' },
+      { key: 'removeCol', label: '-C', title: '刪除欄' },
+      { key: 'addRow', label: '+R', title: '新增列' },
+      { key: 'removeRow', label: '-R', title: '刪除列' },
       { key: 'quote', label: '❝', title: '引用' },
       { key: 'h1', label: 'H1', title: '標題 1' },
       { key: 'h2', label: 'H2', title: '標題 2' },
@@ -152,9 +313,16 @@
       btn.classList.add(`${EXT_NS}-tool-btn`);
       btn.addEventListener('click', (event) => {
         event.preventDefault();
-        const instance = editorInstances.get(textarea);
+        const instance = editorInstances.get(sourceKey);
         if (!instance) return;
+        const wysiwygOnlyActions = new Set(['addCol', 'removeCol', 'addRow', 'removeRow']);
         if (instance.mode === 'wysiwyg') {
+          applyRichCommand(instance, def.key);
+        } else if (wysiwygOnlyActions.has(def.key)) {
+          setMode(instance, 'wysiwyg');
+          applyRichCommand(instance, def.key);
+        } else if (instance.markdownSurface.type !== 'textarea') {
+          setMode(instance, 'wysiwyg');
           applyRichCommand(instance, def.key);
         } else {
           applyMarkdownCommand(instance, def.key);
@@ -179,16 +347,26 @@
     editor.setAttribute('data-placeholder', '開始以 WYSIWYG 方式編輯…');
     editor.style.display = 'none';
 
-    const parent = textarea.parentNode;
+    const parent = markdownSurface.element.parentNode;
     if (!parent) return;
-    parent.insertBefore(shell, textarea);
-    shell.append(toolbar, textarea, editor);
+    parent.insertBefore(shell, markdownSurface.element);
+    shell.append(toolbar, markdownSurface.element, editor);
 
-    textarea.classList.add(`${EXT_NS}-textarea`);
-    textarea.dataset.ghxEnhanced = '1';
+    if (markdownSurface.type === 'textarea') {
+      textarea.classList.add(`${EXT_NS}-textarea`);
+    } else {
+      shell.classList.add(`${EXT_NS}-external-markdown-surface`);
+      markdownSurface.element.classList.add(`${EXT_NS}-markdown-surface`);
+    }
+    if (textarea instanceof HTMLTextAreaElement) {
+      textarea.dataset.ghxEnhanced = '1';
+    }
 
     const instance = {
+      sourceKey,
       textarea,
+      markdownSurface,
+      markdownSurfaceDisplay: markdownSurface.element.style.display,
       shell,
       toolbar,
       editor,
@@ -197,7 +375,15 @@
       toolButtons,
       mode: 'markdown',
       syncing: false,
-      lastKnownMarkdown: textarea.value || ''
+      lastKnownMarkdown: getMarkdownValue({ textarea, markdownSurface }) || ''
+    };
+
+    const handleMarkdownSurfaceInput = () => {
+      if (instance.syncing) return;
+      instance.lastKnownMarkdown = getMarkdownValue(instance);
+      if (instance.mode === 'wysiwyg' && document.activeElement !== instance.editor) {
+        syncEditorFromTextarea(instance);
+      }
     };
 
     mdButton.addEventListener('click', (event) => {
@@ -210,29 +396,26 @@
       setMode(instance, 'wysiwyg');
     });
 
-    textarea.addEventListener('input', () => {
-      if (instance.syncing) return;
-      instance.lastKnownMarkdown = textarea.value;
-      if (instance.mode === 'wysiwyg' && document.activeElement !== instance.editor) {
-        syncEditorFromTextarea(instance);
-      }
-    });
-
-    textarea.addEventListener('change', () => {
-      if (instance.syncing) return;
-      instance.lastKnownMarkdown = textarea.value;
-      if (instance.mode === 'wysiwyg' && document.activeElement !== instance.editor) {
-        syncEditorFromTextarea(instance);
-      }
-    });
+    if (textarea instanceof HTMLTextAreaElement) {
+      textarea.addEventListener('input', handleMarkdownSurfaceInput);
+      textarea.addEventListener('change', handleMarkdownSurfaceInput);
+    }
+    if (markdownSurface.inputTarget !== textarea) {
+      markdownSurface.inputTarget.addEventListener('input', handleMarkdownSurfaceInput);
+      markdownSurface.inputTarget.addEventListener('keyup', handleMarkdownSurfaceInput);
+      markdownSurface.inputTarget.addEventListener('change', handleMarkdownSurfaceInput);
+      markdownSurface.inputTarget.addEventListener('blur', handleMarkdownSurfaceInput);
+    }
 
     editor.addEventListener('input', () => syncTextareaFromEditor(instance));
     editor.addEventListener('blur', () => syncTextareaFromEditor(instance, true));
     editor.addEventListener('keydown', (event) => handleEditorKeydown(event, instance));
     editor.addEventListener('paste', (event) => handleEditorPaste(event, instance));
+    editor.addEventListener('click', (event) => handleEditorClick(event, instance));
+    editor.addEventListener('change', (event) => handleEditorChange(event, instance));
 
-    editorInstances.set(textarea, instance);
-    enhancedTextareas.add(textarea);
+    editorInstances.set(sourceKey, instance);
+    enhancedTextareas.add(sourceKey);
     updateShellWidth(instance);
   }
 
@@ -250,7 +433,7 @@
 
     if (mode === 'wysiwyg') {
       syncEditorFromTextarea(instance);
-      instance.textarea.style.display = 'none';
+      setMarkdownSurfaceVisibility(instance, false);
       instance.editor.style.display = 'block';
       instance.wysButton.classList.add('is-active');
       instance.mdButton.classList.remove('is-active');
@@ -260,14 +443,24 @@
       placeCaretAtEnd(instance.editor);
     } else {
       syncTextareaFromEditor(instance, true);
-      instance.textarea.style.display = '';
+      setMarkdownSurfaceVisibility(instance, true);
       instance.editor.style.display = 'none';
       instance.mdButton.classList.add('is-active');
       instance.wysButton.classList.remove('is-active');
       instance.mode = 'markdown';
       instance.shell.classList.remove('is-wysiwyg');
-      instance.textarea.focus();
+      focusMarkdownSurface(instance);
     }
+  }
+
+  function setMarkdownSurfaceVisibility(instance, visible) {
+    if (!instance?.markdownSurface?.element) return;
+    instance.markdownSurface.element.style.display = visible ? instance.markdownSurfaceDisplay : 'none';
+  }
+
+  function focusMarkdownSurface(instance) {
+    const target = instance?.markdownSurface?.inputTarget || instance?.textarea;
+    target?.focus?.();
   }
 
   function handleEditorKeydown(event, instance) {
@@ -299,9 +492,26 @@
     syncTextareaFromEditor(instance);
   }
 
+  function handleEditorClick(event, instance) {
+    const checkbox = event.target.closest(`.${EXT_NS}-task-checkbox`);
+    if (!checkbox) return;
+    event.stopPropagation();
+  }
+
+  function handleEditorChange(event, instance) {
+    const checkbox = event.target.closest(`.${EXT_NS}-task-checkbox`);
+    if (!checkbox) return;
+    const listItem = checkbox.closest('li');
+    if (listItem) {
+      listItem.dataset.task = checkbox.checked ? 'done' : 'todo';
+    }
+    syncTextareaFromEditor(instance, true);
+  }
+
   function syncEditorFromTextarea(instance) {
-    const markdown = instance.textarea.value || '';
+    const markdown = getMarkdownValue(instance);
     instance.editor.innerHTML = sanitizeHtml(markdownToHtml(markdown));
+    decorateTaskLists(instance.editor);
     instance.lastKnownMarkdown = markdown;
     ensureEditorPlaceholder(instance.editor);
   }
@@ -312,13 +522,57 @@
     try {
       ensureEditorPlaceholder(instance.editor);
       const markdown = htmlToMarkdown(instance.editor.innerHTML);
-      if (instance.textarea.value !== markdown) {
-        instance.textarea.value = markdown;
+      if (getMarkdownValue(instance) !== markdown) {
+        setMarkdownValue(instance, markdown, fireChange);
         instance.lastKnownMarkdown = markdown;
-        dispatchTextInputEvents(instance.textarea, fireChange);
       }
     } finally {
       instance.syncing = false;
+    }
+  }
+
+  function getMarkdownValue(instance) {
+    const view = instance?.markdownSurface?.view;
+    if (view?.state?.doc) {
+      return view.state.doc.toString();
+    }
+    if (instance?.markdownSurface?.type === 'codemirror') {
+      const fallback = getCodeMirrorDomText(instance.markdownSurface.element);
+      if (fallback) return fallback;
+    }
+    return instance?.textarea?.value || '';
+  }
+
+  function getCodeMirrorDomText(editorEl) {
+    if (!editorEl) return '';
+    const lines = Array.from(editorEl.querySelectorAll('.cm-line'));
+    if (!lines.length) return '';
+    return lines
+      .map((line) => (line.textContent || '').replace(/\u00a0/g, ' '))
+      .join('\n');
+  }
+
+  function setMarkdownValue(instance, markdown, fireChange = false) {
+    const view = instance?.markdownSurface?.view;
+    const currentValue = getMarkdownValue(instance);
+    if (currentValue === markdown) return;
+
+    if (view?.dispatch && view?.state?.doc) {
+      view.dispatch({
+        changes: {
+          from: 0,
+          to: view.state.doc.length,
+          insert: markdown
+        }
+      });
+    }
+
+    if (instance?.textarea && instance.textarea.value !== markdown) {
+      instance.textarea.value = markdown;
+    }
+
+    if (instance?.textarea) {
+      dispatchTextInputEvents(instance.textarea, fireChange);
     }
   }
 
@@ -352,6 +606,24 @@
       case 'ol':
         document.execCommand('insertOrderedList');
         break;
+      case 'task':
+        insertTaskList(instance.editor);
+        break;
+      case 'table':
+        insertTable(instance.editor);
+        break;
+      case 'addCol':
+        addTableColumn(instance.editor);
+        break;
+      case 'removeCol':
+        removeTableColumn(instance.editor);
+        break;
+      case 'addRow':
+        addTableRow(instance.editor);
+        break;
+      case 'removeRow':
+        removeTableRow(instance.editor);
+        break;
       case 'quote':
         document.execCommand('formatBlock', false, 'blockquote');
         break;
@@ -379,6 +651,7 @@
       default:
         break;
     }
+    decorateTaskLists(instance.editor);
     syncTextareaFromEditor(instance);
   }
 
@@ -405,6 +678,113 @@
     const text = selection && selection.rangeCount > 0 ? selection.toString() : '';
     const safeText = escapeHtml(text || 'code');
     insertHtmlAtCursor(`<pre><code>${safeText}</code></pre>`);
+  }
+
+  function insertTaskList(editor) {
+    const selection = window.getSelection();
+    const selectedText = selection && selection.rangeCount > 0 ? selection.toString() : '';
+    const items = selectedText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const html = `<ul>${(items.length ? items : ['待辦事項']).map((item) => `<li data-task="todo">${escapeHtml(item)}</li>`).join('')}</ul>`;
+    insertHtmlAtCursor(html);
+    decorateTaskLists(editor);
+  }
+
+  function insertTable(editor) {
+    const html = [
+      '<table>',
+      '<thead><tr><th>欄位 1</th><th>欄位 2</th></tr></thead>',
+      '<tbody><tr><td>內容 1</td><td>內容 2</td></tr></tbody>',
+      '</table>',
+      '<p></p>'
+    ].join('');
+    insertHtmlAtCursor(html);
+    decorateTaskLists(editor);
+  }
+
+  function getActiveTableCell(editor) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    let node = selection.anchorNode;
+    if (!node) return null;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    if (!(node instanceof Element)) return null;
+    const cell = node.closest('td, th');
+    if (!cell || !editor.contains(cell)) return null;
+    return cell;
+  }
+
+  function addTableColumn(editor) {
+    const cell = getActiveTableCell(editor);
+    const table = cell?.closest('table');
+    if (!cell || !table) return;
+    const colIndex = cell.cellIndex;
+
+    Array.from(table.rows).forEach((row) => {
+      const insertBefore = row.children[colIndex + 1] || null;
+      const tagName = row.parentElement?.tagName.toLowerCase() === 'thead' ? 'th' : 'td';
+      const newCell = document.createElement(tagName);
+      newCell.textContent = tagName === 'th' ? `欄位 ${colIndex + 2}` : '內容';
+      row.insertBefore(newCell, insertBefore);
+    });
+  }
+
+  function removeTableColumn(editor) {
+    const cell = getActiveTableCell(editor);
+    const table = cell?.closest('table');
+    if (!cell || !table) return;
+    const colIndex = cell.cellIndex;
+    const firstRow = table.rows[0];
+    if (!firstRow || firstRow.children.length <= 1) return;
+
+    Array.from(table.rows).forEach((row) => {
+      if (row.children[colIndex]) {
+        row.removeChild(row.children[colIndex]);
+      }
+    });
+  }
+
+  function addTableRow(editor) {
+    const cell = getActiveTableCell(editor);
+    const table = cell?.closest('table');
+    const row = cell?.parentElement;
+    if (!cell || !table || !row) return;
+
+    const sectionTag = row.parentElement?.tagName.toLowerCase();
+    const targetSection = sectionTag === 'thead'
+      ? (table.tBodies[0] || table.appendChild(document.createElement('tbody')))
+      : row.parentElement;
+
+    const colCount = row.children.length || table.rows[0]?.children.length || 2;
+    const newRow = document.createElement('tr');
+    for (let i = 0; i < colCount; i += 1) {
+      const td = document.createElement('td');
+      td.textContent = '內容';
+      newRow.appendChild(td);
+    }
+
+    if (sectionTag === 'thead') {
+      targetSection.insertBefore(newRow, targetSection.firstChild || null);
+      return;
+    }
+
+    const nextRow = row.nextSibling;
+    targetSection.insertBefore(newRow, nextRow || null);
+  }
+
+  function removeTableRow(editor) {
+    const cell = getActiveTableCell(editor);
+    const table = cell?.closest('table');
+    const row = cell?.parentElement;
+    if (!cell || !table || !row) return;
+
+    const sectionTag = row.parentElement?.tagName.toLowerCase();
+    if (sectionTag === 'thead') return;
+    if (row.parentElement.children.length <= 1) return;
+    row.parentElement.removeChild(row);
   }
 
   function insertHtmlAtCursor(html) {
@@ -444,6 +824,12 @@
         break;
       case 'ol':
         numberSelectedLines(textarea);
+        break;
+      case 'task':
+        prefixSelectedLines(textarea, '- [ ] ');
+        break;
+      case 'table':
+        insertMarkdownTable(textarea);
         break;
       case 'quote':
         prefixSelectedLines(textarea, '> ');
@@ -540,6 +926,20 @@
       return;
     }
     prefixSelectedLines(textarea, prefix);
+  }
+
+  function insertMarkdownTable(textarea) {
+    const template = [
+      '| 欄位 1 | 欄位 2 |',
+      '| --- | --- |',
+      '| 內容 1 | 內容 2 |'
+    ].join('\n');
+    const selected = getTextareaSelection(textarea);
+    if (selected && selected.trim()) {
+      replaceTextareaSelection(textarea, `${selected}\n\n${template}`);
+      return;
+    }
+    replaceTextareaSelection(textarea, template);
   }
 
   function markdownToHtml(markdown) {
@@ -648,7 +1048,7 @@
       const taskMatch = content.match(/^\[( |x|X)\]\s+(.*)$/);
       if (taskMatch) {
         const checked = /x/i.test(taskMatch[1]);
-        html += `<li data-task="${checked ? 'done' : 'todo'}">${checked ? '☑ ' : '☐ '}${parseInlineMarkdown(taskMatch[2])}</li>`;
+        html += `<li data-task="${checked ? 'done' : 'todo'}">${parseInlineMarkdown(taskMatch[2])}</li>`;
       } else {
         html += `<li>${parseInlineMarkdown(content)}</li>`;
       }
@@ -738,6 +1138,14 @@
 
   function normalizeEditorDom(root) {
     root.querySelectorAll('br[data-ghx-temp]').forEach((node) => node.remove());
+    root.querySelectorAll(`span.${EXT_NS}-task-box`).forEach((node) => {
+      const checkbox = node.querySelector(`input.${EXT_NS}-task-checkbox`);
+      const listItem = node.closest('li');
+      if (checkbox && listItem) {
+        listItem.dataset.task = checkbox.checked ? 'done' : 'todo';
+      }
+      node.remove();
+    });
   }
 
   function nodeToMarkdown(node, context) {
@@ -916,6 +1324,26 @@
     return template.innerHTML;
   }
 
+  function decorateTaskLists(root) {
+    root.querySelectorAll(`span.${EXT_NS}-task-box`).forEach((node) => node.remove());
+
+    root.querySelectorAll('li[data-task]').forEach((item) => {
+      const checked = item.dataset.task === 'done';
+      const box = document.createElement('span');
+      box.className = `${EXT_NS}-task-box`;
+      box.contentEditable = 'false';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = `${EXT_NS}-task-checkbox`;
+      checkbox.checked = checked;
+      checkbox.setAttribute('aria-label', checked ? '已完成 task' : '未完成 task');
+
+      box.appendChild(checkbox);
+      item.insertBefore(box, item.firstChild);
+    });
+  }
+
   function safeUrl(url) {
     const raw = String(url || '').trim();
     if (!raw) return '';
@@ -970,7 +1398,7 @@
 
   function updateWideToggleLabel() {
     if (!wideToggleEl) return;
-    wideToggleEl.textContent = `寬版閱讀：${currentWideMode ? '開' : '關'}`;
+    wideToggleEl.textContent = `寬版閱讀：${currentWideMode ? '開' : '關'} · v${EXT_VERSION}`;
     wideToggleEl.classList.toggle('is-on', currentWideMode);
     wideToggleEl.classList.toggle('is-off', !currentWideMode);
   }

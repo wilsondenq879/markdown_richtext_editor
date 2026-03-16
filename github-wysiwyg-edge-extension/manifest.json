@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GitHub WYSIWYG + Wide View",
-  "version": "0.1.0",
+  "version": "0.4.1",
   "description": "Adds a toggleable WYSIWYG editor and a wide reading switch to GitHub issues, project side panels, comments, and Markdown file editing.",
   "permissions": ["storage"],
   "host_permissions": ["https://github.com/*"],

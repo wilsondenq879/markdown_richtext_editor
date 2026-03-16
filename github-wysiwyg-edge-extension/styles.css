@@ -108,6 +108,23 @@
   padding-left: 24px;
 }
 
+.ghx-wysiwyg li[data-task] {
+  list-style: none;
+  margin-left: -24px;
+}
+
+.ghx-wysiwyg .ghx-task-box {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.ghx-wysiwyg .ghx-task-checkbox {
+  margin: 0;
+  cursor: pointer;
+}
+
 .ghx-wysiwyg blockquote {
   padding-left: 12px;
   border-left: 4px solid var(--color-border-muted, #d8dee4);

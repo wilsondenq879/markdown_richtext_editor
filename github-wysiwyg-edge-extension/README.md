@@ -20,10 +20,12 @@
   - 粗體、斜體、刪除線
   - 行內程式碼、程式碼區塊
   - 連結
-  - 清單、引用
+  - 表格插入
+  - 表格欄列調整（+Col / -Col / +Row / -Row）
+  - 清單、Task List、引用
   - H1 / H2 / H3
   - 分隔線
-- 右下角固定顯示「寬版閱讀：開 / 關」
+- 右下角固定顯示「寬版閱讀：開 / 關」與目前 extension 版本號
 - 透過 `MutationObserver` 自動處理 GitHub 動態載入編輯器
 - 透過 `chrome.storage.sync` 記住寬版閱讀狀態
 
