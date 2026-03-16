@@ -208,28 +208,44 @@ html.ghx-wide-mode .application-main .container-md,
 html.ghx-wide-mode .application-main .container-sm,
 html.ghx-wide-mode .application-main .container,
 html.ghx-wide-mode .application-main .Layout,
-html.ghx-wide-mode .application-main .Layout-main,
 html.ghx-wide-mode .application-main .repository-content,
 html.ghx-wide-mode .application-main .discussion-timeline,
-html.ghx-wide-mode .application-main .new-discussion-timeline,
-html.ghx-wide-mode .application-main .markdown-body,
-html.ghx-wide-mode .application-main [data-testid*="issue"],
-html.ghx-wide-mode .application-main [data-testid*="project"],
-html.ghx-wide-mode .application-main [class*="container"],
-html.ghx-wide-mode .application-main [class*="Layout-main"] {
-  max-width: min(96vw, 1900px) !important;
+html.ghx-wide-mode .application-main .new-discussion-timeline {
+  max-width: 98vw !important;
+  width: 98vw !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 html.ghx-wide-mode .application-main .Layout-main,
 html.ghx-wide-mode .application-main .repository-content,
 html.ghx-wide-mode .application-main .discussion-timeline,
 html.ghx-wide-mode .application-main .new-discussion-timeline {
-  width: min(96vw, 1900px) !important;
+  max-width: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
 }
 
-html.ghx-wide-mode .application-main aside,
-html.ghx-wide-mode .application-main [role="dialog"],
-html.ghx-wide-mode .application-main [aria-label*="issue" i],
-html.ghx-wide-mode .application-main [aria-label*="comment" i] {
-  max-width: min(92vw, 1500px) !important;
+html.ghx-wide-mode .application-main [role="dialog"] {
+  max-width: 96vw !important;
+}
+
+html.ghx-wide-mode .application-main .gh-header-title,
+html.ghx-wide-mode .application-main .gh-header-title .markdown-title,
+html.ghx-wide-mode .application-main h1 {
+  writing-mode: horizontal-tb !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+html.ghx-wide-mode .application-main .markdown-body {
+  max-width: none !important;
+  overflow-x: auto;
+}
+
+html.ghx-wide-mode .application-main .markdown-body table {
+  display: block;
+  width: max-content;
+  min-width: 100%;
 }
