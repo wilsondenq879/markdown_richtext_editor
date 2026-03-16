@@ -291,6 +291,7 @@
       { key: 'code', label: '</>', title: '行內程式碼' },
       { key: 'codeblock', label: '{ }', title: '程式碼區塊' },
       { key: 'link', label: '🔗', title: '連結' },
+      { key: 'image', label: 'Img', title: '圖片' },
       { key: 'ul', label: '•', title: '無序清單' },
       { key: 'ol', label: '1.', title: '有序清單' },
       { key: 'task', label: '☑', title: 'Task List' },
@@ -648,6 +649,14 @@
         }
         break;
       }
+      case 'image': {
+        const selectedText = (window.getSelection()?.toString() || '').trim();
+        const image = promptForImageData(selectedText || '圖片');
+        if (image) {
+          insertHtmlAtCursor(`<img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}">`);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -819,6 +828,14 @@
         }
         break;
       }
+      case 'image': {
+        const selection = (getTextareaSelection(textarea) || '').trim();
+        const image = promptForImageData(selection || '圖片');
+        if (image) {
+          replaceTextareaSelection(textarea, `![${image.alt}](${image.src})`);
+        }
+        break;
+      }
       case 'ul':
         prefixSelectedLines(textarea, '- ');
         break;
@@ -940,6 +957,25 @@
       return;
     }
     replaceTextareaSelection(textarea, template);
+  }
+
+  function promptForImageData(defaultAlt = '圖片') {
+    const rawUrl = window.prompt('請輸入圖片 URL', 'https://');
+    if (!rawUrl) return null;
+
+    const src = safeUrl(rawUrl);
+    if (!src) {
+      window.alert('圖片 URL 無效，請使用 http://、https:// 或站內相對路徑。');
+      return null;
+    }
+
+    const altInput = window.prompt('請輸入圖片說明文字（alt）', defaultAlt);
+    if (altInput === null) return null;
+
+    return {
+      src,
+      alt: altInput.trim() || '圖片'
+    };
   }
 
   function markdownToHtml(markdown) {

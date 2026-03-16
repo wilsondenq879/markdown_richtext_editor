@@ -149,6 +149,14 @@
   background: var(--color-neutral-muted, rgba(175,184,193,0.2));
 }
 
+.ghx-wysiwyg img {
+  display: block;
+  max-width: min(100%, 720px);
+  height: auto;
+  margin: 12px 0;
+  border-radius: 8px;
+}
+
 .ghx-wysiwyg table {
   border-collapse: collapse;
   width: 100%;
